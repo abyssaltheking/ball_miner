@@ -18,8 +18,8 @@ gravity: f32 : 0.1
 drag: f32 : 0.1
 windowWidth, windowHeight: i32 : 720, 720
 
-score: int = 0
-highscore: int = 0
+score: i64 = 0
+highscore: i64 = 0
 player := ray.Rectangle{f32(windowWidth / 2), 40, 20, 20}
 blocks: [dynamic]block = create_blocks(ray.Vector2{0, 120}, 30, 25, 24, 24)
 
@@ -54,6 +54,8 @@ main :: proc() {
 		},
 	)
 
+	font := ray.LoadFont("assets/PixelOperatorMono.ttf")
+
 	smash_down_cooldown: f32 = 0
 
 	for !ray.WindowShouldClose() {
@@ -78,6 +80,7 @@ main :: proc() {
 
 		if ray.IsKeyDown(ray.KeyboardKey.D) || ray.IsKeyDown(ray.KeyboardKey.RIGHT) do player_velocity.x += 0.2
 		if ray.IsKeyDown(ray.KeyboardKey.A) || ray.IsKeyDown(ray.KeyboardKey.LEFT) do player_velocity.x -= 0.2
+		if ray.IsKeyReleased(ray.KeyboardKey.R) do reset_game()
 
 		if player.x >= 690 || player.x <= 0 do player_velocity.x *= -0.9
 		if player.x >= 690 do player.x = 689
@@ -116,8 +119,6 @@ main :: proc() {
 					went_in_portal = true
 					reset_game()
 				}
-
-				fmt.println("collided with block")
 			}
 		}
 
@@ -143,8 +144,35 @@ main :: proc() {
 			)
 		}
 
-		fmt.println(score)
-		fmt.println(highscore)
+		buf: [19]byte
+		score_text := strings.clone_to_cstring(strconv.write_int(buf[:], score, 10))
+		highscore_text := strings.clone_to_cstring(strconv.write_int(buf[:], highscore, 10))
+
+		score_text_measurement := ray.MeasureTextEx(font, cstring(score_text), 40, 0)
+
+		ray.DrawTextPro(
+			font,
+			cstring(score_text),
+			ray.Vector2{f32(windowWidth / 2), 25},
+			ray.Vector2{score_text_measurement.x / 2, 0},
+			0,
+			40,
+			0,
+			ray.RAYWHITE,
+		)
+
+
+		ray.DrawTextPro(
+			font,
+			cstring(highscore_text),
+			ray.Vector2{25, 25},
+			ray.Vector2{0, 0},
+			0,
+			30,
+			0,
+			ray.YELLOW,
+		)
+
 
 		ray.EndDrawing()
 	}
@@ -179,24 +207,25 @@ create_blocks :: proc(
 
 	for posX < total_length {
 		for posY <= total_height {
-			rng := rand.float32_range(0, (used_portal ? 20 : 21))
+			rng := rand.float32_range(0, (used_portal ? 49 : 50))
 			rng = math.round(rng)
 			type: int
 
-			if rng < 13 {
+
+			if rng < 33 {
 				type = 0
-			} else if rng < 16 {
+			} else if rng < 40 {
 				type = 1
-			} else if rng < 19 {
+			} else if rng < 48 {
 				type = 2
-			} else if rng < 20 {
+			} else if rng < 50 {
 				type = 3
-			} else if rng == 20 && !used_portal {
+			} else if rng == 50 && !used_portal && rand.float32_range(0, 1) > 0.75 {
 				type = 4
 				used_portal = true
 			}
 
-			if !used_portal && (posX == total_length && posY == total_height) {
+			if !used_portal && (posX == total_length - 2 && posY == total_height - 2) {
 				type = 4
 			}
 
