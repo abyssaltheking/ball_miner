@@ -16,11 +16,11 @@ block :: struct {
 
 gravity: f32 : 0.1
 drag: f32 : 0.1
-windowWidth, windowHeight: i32 : 720, 720
+window_width, window_height: i32 : 720, 720
 
 score: i64 = 0
 highscore: i64 = 0
-player := ray.Rectangle{f32(windowWidth / 2), 40, 20, 20}
+player := ray.Rectangle{f32(window_width / 2), 40, 20, 20}
 blocks: [dynamic]block = create_blocks(ray.Vector2{0, 120}, 30, 25, 24, 24)
 
 went_in_portal: bool = false
@@ -28,14 +28,40 @@ went_in_portal: bool = false
 player_velocity := ray.Vector2{0, 0}
 player_terminal_velocity: f32 = 8
 
-main :: proc() {
-	ray.InitWindow(windowWidth, windowHeight, "Ball Miner")
-	ray.SetTargetFPS(60)
-	defer ray.CloseWindow()
+player_frame := 0
+player_animation_timer: f32 = 0
+player_textures, block_textures: [dynamic]ray.Texture2D
 
-	player_frame := 0
+font: ray.Font
+
+lose_sound, mine_sound, ore_sound, portal_sound: ray.Sound
+
+sounds :: enum {
+	lose,
+	mine,
+	ore,
+	portal,
+}
+
+main :: proc() {
+	initialization()
+	defer deinitialization()
+
+	for !ray.WindowShouldClose() {
+		animate()
+		update()
+		draw()
+	}
+}
+
+initialization :: proc() {
+	ray.InitWindow(window_width, window_height, "Ball Miner")
+	ray.SetTargetFPS(60)
+	ray.InitAudioDevice()
+
+	player_frame = 0
 	player_animation_timer: f32 = 0
-	player_textures := create_texture_array(
+	player_textures = create_texture_array(
 		[dynamic]cstring {
 			"assets/player/player_0.png",
 			"assets/player/player_1.png",
@@ -44,7 +70,7 @@ main :: proc() {
 		},
 	)
 
-	block_textures := create_texture_array(
+	block_textures = create_texture_array(
 		[dynamic]cstring {
 			"assets/blocks/blocks_0.png",
 			"assets/blocks/blocks_1.png",
@@ -54,143 +80,177 @@ main :: proc() {
 		},
 	)
 
-	font := ray.LoadFont("assets/PixelOperatorMono.ttf")
+	font = ray.GetFontDefault()
 
-	smash_down_cooldown: f32 = 0
+	lose_sound = ray.LoadSound("assets/audio/lose.wav")
+	portal_sound = ray.LoadSound("assets/audio/portal.wav")
+	ore_sound = ray.LoadSound("assets/audio/mineOre.wav")
+	mine_sound = ray.LoadSound("assets/audio/mine.wav")
+}
 
-	for !ray.WindowShouldClose() {
-		player_animation_timer += ray.GetFrameTime()
-		smash_down_cooldown += ray.GetFrameTime()
+deinitialization :: proc() {
+	ray.CloseWindow()
+	ray.CloseAudioDevice()
+}
 
-		if player_animation_timer >= 0.08333 {
-			player_frame += 1
-			player_animation_timer = 0
-		}
+animate :: proc() {
+	player_animation_timer += ray.GetFrameTime()
 
-		if player_frame > 3 {
-			player_frame = 0
-		}
+	if player_animation_timer >= 0.08333 {
+		player_frame += 1
+		player_animation_timer = 0
+	}
 
-		if player_velocity.x > 0 do player_velocity.x -= drag
-		if player_velocity.x < 0 do player_velocity.x += drag
-		if abs(player_velocity.x) < drag do player_velocity.x = 0
+	if player_frame > 3 {
+		player_frame = 0
+	}
+}
 
-		player_velocity.y += gravity
-		if player_velocity.y < -3 do player_velocity.y = -3
+update :: proc() {
+	if player_velocity.x > 0 do player_velocity.x -= drag
+	if player_velocity.x < 0 do player_velocity.x += drag
+	if abs(player_velocity.x) < drag do player_velocity.x = 0
 
-		if ray.IsKeyDown(ray.KeyboardKey.D) || ray.IsKeyDown(ray.KeyboardKey.RIGHT) do player_velocity.x += 0.2
-		if ray.IsKeyDown(ray.KeyboardKey.A) || ray.IsKeyDown(ray.KeyboardKey.LEFT) do player_velocity.x -= 0.2
-		if ray.IsKeyReleased(ray.KeyboardKey.R) do reset_game()
+	player_velocity.y += gravity
+	if player_velocity.y < -3 do player_velocity.y = -3
 
-		if player.x >= 690 || player.x <= 0 do player_velocity.x *= -0.9
-		if player.x >= 690 do player.x = 689
-		if player.x <= 0 do player.x = 1
-		if player.y >= 690 do reset_game()
+	if ray.IsKeyDown(ray.KeyboardKey.D) || ray.IsKeyDown(ray.KeyboardKey.RIGHT) do player_velocity.x += 0.2
+	if ray.IsKeyDown(ray.KeyboardKey.A) || ray.IsKeyDown(ray.KeyboardKey.LEFT) do player_velocity.x -= 0.2
+	if ray.IsKeyReleased(ray.KeyboardKey.R) do reset_game()
 
-		if player_velocity.x > player_terminal_velocity do player_velocity.x = player_terminal_velocity
-		if player_velocity.x < -player_terminal_velocity do player_velocity.x = -player_terminal_velocity
+	if player.x >= 690 || player.x <= 0 do player_velocity.x *= -0.9
+	if player.x >= 690 do player.x = 689
+	if player.x <= 0 do player.x = 1
+	if player.y >= 690 do reset_game()
 
-		if player_velocity.y > player_terminal_velocity do player_velocity.y = player_terminal_velocity
-		if player_velocity.y < -player_terminal_velocity do player_velocity.y = -player_terminal_velocity
+	if player_velocity.x > player_terminal_velocity do player_velocity.x = player_terminal_velocity
+	if player_velocity.x < -player_terminal_velocity do player_velocity.x = -player_terminal_velocity
 
-		player.x += player_velocity.x
-		player.y += player_velocity.y
+	if player_velocity.y > player_terminal_velocity do player_velocity.y = player_terminal_velocity
+	if player_velocity.y < -player_terminal_velocity do player_velocity.y = -player_terminal_velocity
 
-		player.x = math.round_f32(player.x)
-		player.y = math.round_f32(player.y)
+	player.x += player_velocity.x
+	player.y += player_velocity.y
 
-		for i := 0; i < len(blocks); i += 1 {
-			if ray.CheckCollisionRecs(blocks[i].rect, player) {
-				player_velocity.y -= 1.5 * (player_velocity.y < 0 ? -0.5 : 1.5)
-				player_velocity.x -= 1.5 * (player_velocity.x < 0 ? -1 : 1)
-				blocks[i].rect.x = -100
-				blocks[i].rect.y = -100
+	player.x = math.round_f32(player.x)
+	player.y = math.round_f32(player.y)
 
-				switch blocks[i].type {
-				case 0:
-					score += 1
-				case 1:
-					score += 3
-				case 2:
-					score += 8
-				case 3:
-					score += 15
-				case 4:
-					went_in_portal = true
-					reset_game()
-				}
+	for i := 0; i < len(blocks); i += 1 {
+		if ray.CheckCollisionRecs(blocks[i].rect, player) {
+			player_velocity.y -= 1.5 * (player_velocity.y < 0 ? -0.5 : 1.5)
+			player_velocity.x -= 1.5 * (player_velocity.x < 0 ? -1 : 1)
+			blocks[i].rect.x = -100
+			blocks[i].rect.y = -100
+
+			switch blocks[i].type {
+			case 0:
+				score += 1
+				play_sound(sounds.mine)
+			case 1:
+				score += 3
+				play_sound(sounds.ore)
+			case 2:
+				score += 8
+				play_sound(sounds.ore)
+			case 3:
+				score += 15
+				play_sound(sounds.ore)
+			case 4:
+				went_in_portal = true
+				play_sound(sounds.portal)
+				reset_game()
 			}
 		}
+	}
+}
 
-		ray.BeginDrawing()
-		ray.ClearBackground(ray.BLACK)
+draw :: proc() {
+	ray.BeginDrawing()
+	ray.ClearBackground(ray.BLACK)
+	ray.DrawTexturePro(
+		player_textures[player_frame],
+		ray.Rectangle{0, 0, 6, 6},
+		player,
+		ray.Vector2{0, 0},
+		0,
+		ray.WHITE,
+	)
+
+	for i := 0; i < len(blocks); i += 1 {
 		ray.DrawTexturePro(
-			player_textures[player_frame],
-			ray.Rectangle{0, 0, 6, 6},
-			player,
+			block_textures[blocks[i].type],
+			ray.Rectangle{0, 0, 8, 8},
+			blocks[i].rect,
 			ray.Vector2{0, 0},
 			0,
 			ray.WHITE,
 		)
-
-		for i := 0; i < len(blocks); i += 1 {
-			ray.DrawTexturePro(
-				block_textures[blocks[i].type],
-				ray.Rectangle{0, 0, 8, 8},
-				blocks[i].rect,
-				ray.Vector2{0, 0},
-				0,
-				ray.WHITE,
-			)
-		}
-
-		buf: [19]byte
-		score_text := strings.clone_to_cstring(strconv.write_int(buf[:], score, 10))
-		highscore_text := strings.clone_to_cstring(strconv.write_int(buf[:], highscore, 10))
-
-		score_text_measurement := ray.MeasureTextEx(font, cstring(score_text), 40, 0)
-
-		ray.DrawTextPro(
-			font,
-			cstring(score_text),
-			ray.Vector2{f32(windowWidth / 2), 25},
-			ray.Vector2{score_text_measurement.x / 2, 0},
-			0,
-			40,
-			0,
-			ray.RAYWHITE,
-		)
-
-
-		ray.DrawTextPro(
-			font,
-			cstring(highscore_text),
-			ray.Vector2{25, 25},
-			ray.Vector2{0, 0},
-			0,
-			30,
-			0,
-			ray.YELLOW,
-		)
-
-
-		ray.EndDrawing()
 	}
+
+	buf: [19]byte
+	score_text := strings.clone_to_cstring(strconv.write_int(buf[:], score, 10))
+	highscore_text := strings.clone_to_cstring(strconv.write_int(buf[:], highscore, 10))
+
+	score_text_measurement := ray.MeasureTextEx(font, cstring(score_text), 40, 0)
+
+	ray.DrawTextPro(
+		font,
+		cstring(score_text),
+		ray.Vector2{f32(window_width / 2), 25},
+		ray.Vector2{score_text_measurement.x / 2, 0},
+		0,
+		40,
+		4,
+		ray.RAYWHITE,
+	)
+
+	ray.DrawTextPro(
+		font,
+		cstring(highscore_text),
+		ray.Vector2{25, 25},
+		ray.Vector2{0, 0},
+		0,
+		30,
+		0,
+		ray.YELLOW,
+	)
+
+	ray.EndDrawing()
 }
 
 reset_game :: proc() {
-	player.x = f32(windowWidth / 2)
+	player.x = f32(window_width / 2)
 	player.y = 40
 	player_velocity = ray.Vector2{0, 0}
 	clear(&blocks)
 	blocks = create_blocks(ray.Vector2{0, 120}, 30, 25, 24, 24)
 
 	if !went_in_portal {
+		play_sound(sounds.lose)
 		if score > highscore do highscore = score
 		score = 0
 	}
 
 	went_in_portal = false
+}
+
+play_sound :: proc(sound: sounds) {
+	sound_to_play: ray.Sound
+
+	switch sound {
+	case sounds.lose:
+		sound_to_play = lose_sound
+	case sounds.mine:
+		sound_to_play = mine_sound
+	case sounds.ore:
+		sound_to_play = ore_sound
+	case sounds.portal:
+		sound_to_play = portal_sound
+	}
+
+	pitch: f32 = rand.float32_range(0.7, 1.3)
+	ray.SetSoundPitch(sound_to_play, pitch)
+	ray.PlaySound(sound_to_play)
 }
 
 create_blocks :: proc(
