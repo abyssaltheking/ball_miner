@@ -26,7 +26,7 @@ blocks: [dynamic]block = create_blocks(ray.Vector2{0, 120}, 30, 25, 24, 24)
 went_in_portal: bool = false
 
 player_velocity := ray.Vector2{0, 0}
-player_terminal_velocity: f32 = 5
+player_terminal_velocity: f32 = 8
 
 main :: proc() {
 	ray.InitWindow(windowWidth, windowHeight, "Ball Miner")
@@ -158,8 +158,8 @@ reset_game :: proc() {
 	blocks = create_blocks(ray.Vector2{0, 120}, 30, 25, 24, 24)
 
 	if !went_in_portal {
+		if score > highscore do highscore = score
 		score = 0
-		if highscore < score do highscore = score
 	}
 
 	went_in_portal = false
