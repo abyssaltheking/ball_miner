@@ -4,6 +4,7 @@ package main
 import "core:fmt"
 import "core:math"
 import "core:math/rand"
+import "core:strconv"
 import "core:strings"
 import "core:terminal"
 import ray "vendor:raylib"
@@ -18,6 +19,7 @@ drag: f32 : 0.1
 windowWidth, windowHeight: i32 : 720, 720
 
 score: int = 0
+highscore: int = 0
 player := ray.Rectangle{f32(windowWidth / 2), 40, 20, 20}
 blocks: [dynamic]block = create_blocks(ray.Vector2{0, 120}, 30, 25, 24, 24)
 
@@ -101,6 +103,20 @@ main :: proc() {
 				blocks[i].rect.x = -100
 				blocks[i].rect.y = -100
 
+				switch blocks[i].type {
+				case 0:
+					score += 1
+				case 1:
+					score += 3
+				case 2:
+					score += 8
+				case 3:
+					score += 15
+				case 4:
+					went_in_portal = true
+					reset_game()
+				}
+
 				fmt.println("collided with block")
 			}
 		}
@@ -127,6 +143,9 @@ main :: proc() {
 			)
 		}
 
+		fmt.println(score)
+		fmt.println(highscore)
+
 		ray.EndDrawing()
 	}
 }
@@ -137,6 +156,13 @@ reset_game :: proc() {
 	player_velocity = ray.Vector2{0, 0}
 	clear(&blocks)
 	blocks = create_blocks(ray.Vector2{0, 120}, 30, 25, 24, 24)
+
+	if !went_in_portal {
+		score = 0
+		if highscore < score do highscore = score
+	}
+
+	went_in_portal = false
 }
 
 create_blocks :: proc(
