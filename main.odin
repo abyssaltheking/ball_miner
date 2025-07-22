@@ -2,30 +2,34 @@
 package main
 
 import "core:fmt"
+import "core:math"
+import "core:math/rand"
 import "core:strings"
+import "core:terminal"
 import ray "vendor:raylib"
 
-entity :: struct {
-	rect:     ray.Rectangle,
-	velocity: ray.Vector2,
+block :: struct {
+	rect: ray.Rectangle,
+	type: int,
 }
 
-gravity: f32 : 10
+gravity: f32 : 0.1
+drag: f32 : 0.1
 windowWidth, windowHeight: i32 : 720, 720
 
+score: int = 0
+player := ray.Rectangle{f32(windowWidth / 2), 40, 20, 20}
+blocks: [dynamic]block = create_blocks(ray.Vector2{0, 120}, 30, 25, 24, 24)
+
+went_in_portal: bool = false
+
+player_velocity := ray.Vector2{0, 0}
+player_terminal_velocity: f32 = 5
+
 main :: proc() {
-	//
-	//	window initialization
-	//
 	ray.InitWindow(windowWidth, windowHeight, "Ball Miner")
 	ray.SetTargetFPS(60)
 	defer ray.CloseWindow()
-
-	//
-	//	player initialization
-	//
-	player := entity{ray.Rectangle{360, 40, 30, 30}, ray.Vector2{}}
-	player.rect.x = f32(windowWidth / 2)
 
 	player_frame := 0
 	player_animation_timer: f32 = 0
@@ -38,11 +42,21 @@ main :: proc() {
 		},
 	)
 
+	block_textures := create_texture_array(
+		[dynamic]cstring {
+			"assets/blocks/blocks_0.png",
+			"assets/blocks/blocks_1.png",
+			"assets/blocks/blocks_2.png",
+			"assets/blocks/blocks_3.png",
+			"assets/blocks/blocks_4.png",
+		},
+	)
+
+	smash_down_cooldown: f32 = 0
+
 	for !ray.WindowShouldClose() {
-		//
-		//	animation
-		// 
 		player_animation_timer += ray.GetFrameTime()
+		smash_down_cooldown += ray.GetFrameTime()
 
 		if player_animation_timer >= 0.08333 {
 			player_frame += 1
@@ -53,22 +67,134 @@ main :: proc() {
 			player_frame = 0
 		}
 
+		if player_velocity.x > 0 do player_velocity.x -= drag
+		if player_velocity.x < 0 do player_velocity.x += drag
+		if abs(player_velocity.x) < drag do player_velocity.x = 0
 
-		//
-		// drawing
-		//
+		player_velocity.y += gravity
+		if player_velocity.y < -3 do player_velocity.y = -3
+
+		if ray.IsKeyDown(ray.KeyboardKey.D) || ray.IsKeyDown(ray.KeyboardKey.RIGHT) do player_velocity.x += 0.2
+		if ray.IsKeyDown(ray.KeyboardKey.A) || ray.IsKeyDown(ray.KeyboardKey.LEFT) do player_velocity.x -= 0.2
+
+		if player.x >= 690 || player.x <= 0 do player_velocity.x *= -0.9
+		if player.x >= 690 do player.x = 689
+		if player.x <= 0 do player.x = 1
+		if player.y >= 690 do reset_game()
+
+		if player_velocity.x > player_terminal_velocity do player_velocity.x = player_terminal_velocity
+		if player_velocity.x < -player_terminal_velocity do player_velocity.x = -player_terminal_velocity
+
+		if player_velocity.y > player_terminal_velocity do player_velocity.y = player_terminal_velocity
+		if player_velocity.y < -player_terminal_velocity do player_velocity.y = -player_terminal_velocity
+
+		player.x += player_velocity.x
+		player.y += player_velocity.y
+
+		player.x = math.round_f32(player.x)
+		player.y = math.round_f32(player.y)
+
+		for i := 0; i < len(blocks); i += 1 {
+			if ray.CheckCollisionRecs(blocks[i].rect, player) {
+				player_velocity.y -= 1.5 * (player_velocity.y < 0 ? -0.5 : 1.5)
+				player_velocity.x -= 1.5 * (player_velocity.x < 0 ? -1 : 1)
+				blocks[i].rect.x = -100
+				blocks[i].rect.y = -100
+
+				fmt.println("collided with block")
+			}
+		}
+
 		ray.BeginDrawing()
 		ray.ClearBackground(ray.BLACK)
 		ray.DrawTexturePro(
 			player_textures[player_frame],
-			ray.Rectangle{0, 0, 8, 8},
-			player.rect,
+			ray.Rectangle{0, 0, 6, 6},
+			player,
 			ray.Vector2{0, 0},
 			0,
 			ray.WHITE,
 		)
+
+		for i := 0; i < len(blocks); i += 1 {
+			ray.DrawTexturePro(
+				block_textures[blocks[i].type],
+				ray.Rectangle{0, 0, 8, 8},
+				blocks[i].rect,
+				ray.Vector2{0, 0},
+				0,
+				ray.WHITE,
+			)
+		}
+
 		ray.EndDrawing()
 	}
+}
+
+reset_game :: proc() {
+	player.x = f32(windowWidth / 2)
+	player.y = 40
+	player_velocity = ray.Vector2{0, 0}
+	clear(&blocks)
+	blocks = create_blocks(ray.Vector2{0, 120}, 30, 25, 24, 24)
+}
+
+create_blocks :: proc(
+	start_position: ray.Vector2,
+	total_length: int,
+	total_height: int,
+	block_width: int,
+	block_height: int,
+) -> [dynamic]block {
+	end_array: [dynamic]block
+	posX := 0
+	posY := 0
+	used_portal := false
+
+	for posX < total_length {
+		for posY <= total_height {
+			rng := rand.float32_range(0, (used_portal ? 20 : 21))
+			rng = math.round(rng)
+			type: int
+
+			if rng < 13 {
+				type = 0
+			} else if rng < 16 {
+				type = 1
+			} else if rng < 19 {
+				type = 2
+			} else if rng < 20 {
+				type = 3
+			} else if rng == 20 && !used_portal {
+				type = 4
+				used_portal = true
+			}
+
+			if !used_portal && (posX == total_length && posY == total_height) {
+				type = 4
+			}
+
+			append(
+				&end_array,
+				block {
+					ray.Rectangle {
+						f32(posX * block_width) + start_position.x,
+						f32(posY * block_height) + start_position.y,
+						f32(block_width),
+						f32(block_height),
+					},
+					type,
+				},
+			)
+			posY += 1
+
+			if posY == total_height && posX != total_length {
+				posY = 0
+				posX += 1
+			}
+		}
+	}
+	return end_array
 }
 
 create_texture_array :: proc(image_filenames: [dynamic]cstring) -> [dynamic]ray.Texture2D {
@@ -78,9 +204,8 @@ create_texture_array :: proc(image_filenames: [dynamic]cstring) -> [dynamic]ray.
 		image := ray.LoadImage(i)
 
 		if !ray.IsImageValid(image) {
-			// tabs added to make it stand out better
 			error_message := strings.concatenate(
-				{"																image was not valid, not loading image: ", string(i)},
+				{"image was not valid, not loading image: ", string(i)},
 			)
 			fmt.eprintln(error_message)
 			continue
