@@ -6,7 +6,7 @@ import "core:math"
 import "core:math/rand"
 import "core:strconv"
 import "core:strings"
-import "core:terminal"
+
 import ray "vendor:raylib"
 
 block :: struct {
@@ -47,7 +47,7 @@ sounds :: enum {
 
 main :: proc() {
 	initialization()
-	defer deinitialization()
+	defer shutdown()
 
 	for !ray.WindowShouldClose() {
 		animate()
@@ -62,7 +62,7 @@ initialization :: proc() {
 	ray.InitAudioDevice()
 
 	player_frame = 0
-	player_animation_timer: f32 = 0
+	player_animation_timer = 0
 	player_textures = create_texture_array(
 		[dynamic]cstring {
 			"assets/player/player_0.png",
@@ -90,7 +90,7 @@ initialization :: proc() {
 	mine_sound = ray.LoadSound("assets/audio/mine.wav")
 }
 
-deinitialization :: proc() {
+shutdown :: proc() {
 	ray.CloseWindow()
 	ray.CloseAudioDevice()
 }
@@ -179,7 +179,7 @@ draw :: proc() {
 	highscore_text := strings.clone_to_cstring(strconv.write_int(buf[:], highscore, 10))
 
 	score_text_measurement := ray.MeasureTextEx(font, score_text, 40, 0)
-	highscore_text_measurement := ray.MeasureTextEx(font, highscore_text, 40, 0)
+
 	proper_highscore_text_measurement := ray.MeasureTextEx(
 		font,
 		strings.clone_to_cstring(
@@ -236,7 +236,7 @@ draw :: proc() {
 			ray.Vector2{0, 0},
 			0,
 			30,
-			0,
+			4,
 			ray.YELLOW,
 		)
 	} else {
