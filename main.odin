@@ -158,7 +158,10 @@ update :: proc() {
 		if player_velocity.y < -player_terminal_velocity do player_velocity.y = -player_terminal_velocity
 
 		for i := 0; i < len(blocks); i += 1 {
-			if blocks[i].rect.y < player.y - player.height * 2 || blocks[i].rect.y > player.y + player.height * 2 || blocks[i].rect.x < player.x - player.height * 2 || blocks[i].rect.x > player.x + player.height * 2 do continue
+			if blocks[i].rect.y < player.y - player.height * 2 ||
+			   blocks[i].rect.y > player.y + player.height * 2 ||
+			   blocks[i].rect.x < player.x - player.height * 2 ||
+			   blocks[i].rect.x > player.x + player.height * 2 {continue}
 
 			if ray.CheckCollisionRecs(blocks[i].rect, player) {
 				player_velocity.y -= 1.5 * (player_velocity.y < 0 ? -0.5 : 1.5)
@@ -377,7 +380,6 @@ create_blocks :: proc(
 			rng := rand.float32_range(0, (used_portal ? 49 : 50))
 			rng = math.round(rng)
 			type: int
-
 
 			if rng < 33 {
 				type = 0
