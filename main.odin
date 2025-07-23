@@ -20,7 +20,7 @@ window_width, window_height: i32 : 720, 720
 
 score: i64 = 0
 highscore: i64 = 0
-player := ray.Rectangle{f32(window_width / 2), 40, 20, 20}
+player := ray.Rectangle{f32(window_width / 2), 40, 19, 19}
 blocks: [dynamic]block = create_blocks(ray.Vector2{0, 120}, 30, 25, 24, 24)
 
 went_in_portal: bool = false
@@ -32,17 +32,19 @@ player_terminal_velocity: f32 = 8
 
 player_frame := 0
 player_animation_timer: f32 = 0
+player_smash_cooldown: f32 = 0
 player_textures, block_textures: [dynamic]ray.Texture2D
 
 font: ray.Font
 
-lose_sound, mine_sound, ore_sound, portal_sound: ray.Sound
+lose_sound, mine_sound, ore_sound, portal_sound, smash_sound: ray.Sound
 
 sounds :: enum {
 	lose,
 	mine,
 	ore,
 	portal,
+	smash,
 }
 
 main :: proc() {
@@ -88,9 +90,21 @@ initialization :: proc() {
 	portal_sound = ray.LoadSound("assets/audio/portal.wav")
 	ore_sound = ray.LoadSound("assets/audio/mineOre.wav")
 	mine_sound = ray.LoadSound("assets/audio/mine.wav")
+	smash_sound = ray.LoadSound("assets/audio/smash.wav")
 }
 
 shutdown :: proc() {
+	ray.UnloadSound(lose_sound)
+	ray.UnloadSound(portal_sound)
+	ray.UnloadSound(ore_sound)
+	ray.UnloadSound(mine_sound)
+	ray.UnloadSound(smash_sound)
+
+	for i in block_textures do ray.UnloadTexture(i)
+	for i in player_textures do ray.UnloadTexture(i)
+
+	ray.UnloadFont(font)
+
 	ray.CloseWindow()
 	ray.CloseAudioDevice()
 }
@@ -113,6 +127,9 @@ update :: proc() {
 	if ray.IsKeyReleased(ray.KeyboardKey.F3) do debug_mode = !debug_mode
 
 	if !is_paused {
+		if player_smash_cooldown > 0 do player_smash_cooldown -= ray.GetFrameTime()
+		if player_smash_cooldown < 0 do player_smash_cooldown = 0
+
 		if player_velocity.x > 0 do player_velocity.x -= drag
 		if player_velocity.x < 0 do player_velocity.x += drag
 		if abs(player_velocity.x) < drag do player_velocity.x = 0
@@ -122,6 +139,12 @@ update :: proc() {
 
 		if ray.IsKeyDown(ray.KeyboardKey.D) || ray.IsKeyDown(ray.KeyboardKey.RIGHT) do player_velocity.x += 0.2
 		if ray.IsKeyDown(ray.KeyboardKey.A) || ray.IsKeyDown(ray.KeyboardKey.LEFT) do player_velocity.x -= 0.2
+		if (ray.IsKeyPressed(ray.KeyboardKey.S) || ray.IsKeyPressed(ray.KeyboardKey.DOWN)) &&
+		   player_smash_cooldown == 0 {
+			player_velocity.y = player_terminal_velocity
+			player_smash_cooldown = 2
+			play_sound(sounds.smash)
+		}
 
 		if player.x >= 690 || player.x <= 0 do player_velocity.x *= -0.9
 		if player.x >= 690 do player.x = 689
@@ -135,6 +158,8 @@ update :: proc() {
 		if player_velocity.y < -player_terminal_velocity do player_velocity.y = -player_terminal_velocity
 
 		for i := 0; i < len(blocks); i += 1 {
+			if blocks[i].rect.y < player.y - player.height * 2 || blocks[i].rect.y > player.y + player.height * 2 || blocks[i].rect.x < player.x - player.height * 2 || blocks[i].rect.x > player.x + player.height * 2 do continue
+
 			if ray.CheckCollisionRecs(blocks[i].rect, player) {
 				player_velocity.y -= 1.5 * (player_velocity.y < 0 ? -0.5 : 1.5)
 				player_velocity.x -= 1.5 * (player_velocity.x < 0 ? -1 : 1)
@@ -192,7 +217,7 @@ draw :: proc() {
 	title_text_measurement := ray.MeasureTextEx(font, "BALL MINER", 70, 15)
 	instructions_text_measurement := ray.MeasureTextEx(
 		font,
-		"A/D or left/right to move, tunnel towards the portal!",
+		"A/D or left/right to move, S or down to smash down",
 		20,
 		4,
 	)
@@ -280,7 +305,7 @@ draw :: proc() {
 
 		ray.DrawTextPro(
 			font,
-			"A/D or left/right to move, tunnel towards the portal!",
+			"A/D or left/right to move, S or down to smash down",
 			ray.Vector2{360, 660},
 			ray.Vector2{instructions_text_measurement.x / 2, instructions_text_measurement.y / 2},
 			0,
@@ -306,6 +331,7 @@ reset_game :: proc() {
 
 	if !went_in_portal {
 		play_sound(sounds.lose)
+		is_paused = true
 		if score > highscore do highscore = score
 		score = 0
 	}
@@ -325,6 +351,8 @@ play_sound :: proc(sound: sounds) {
 		sound_to_play = ore_sound
 	case sounds.portal:
 		sound_to_play = portal_sound
+	case sounds.smash:
+		sound_to_play = smash_sound
 	}
 
 	pitch: f32 = rand.float32_range(0.6, 1.3)
